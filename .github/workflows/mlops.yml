@@ -57,6 +57,8 @@ jobs:
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Pull data with DVC
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_GHA_CREDS_PATH }}
         run: dvc pull
 
       - name: Train model
