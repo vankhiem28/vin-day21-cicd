@@ -1,0 +1,121 @@
+name: MLOps Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/**.dvc'
+      - 'src/**.py'
+      - 'params.yaml'
+  workflow_dispatch:
+
+jobs:
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+  train:
+    name: Train
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      accuracy: ${{ steps.read_metrics.outputs.accuracy }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Pull data with DVC
+        run: dvc pull
+
+      - name: Train model
+        run: python src/train.py
+
+      - name: Read metrics
+        id: read_metrics
+        run: |
+          python -c "import json; m=json.load(open('outputs/metrics.json')); print(f\"accuracy={m['accuracy']}\")" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
+
+      - name: Upload model to Cloud Storage
+        run: |
+          python - <<'EOF'
+          import os
+          from google.cloud import storage
+
+          client = storage.Client()
+          bucket = client.bucket(os.environ["GCS_BUCKET"])
+          blob = bucket.blob("models/latest/model.pkl")
+          blob.upload_from_filename("models/model.pkl")
+          print("Uploaded models/model.pkl to gs://%s/models/latest/model.pkl" % os.environ["GCS_BUCKET"])
+          EOF
+
+      - name: Save metrics as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics
+          path: outputs/metrics.json
+
+  eval:
+    name: Eval
+    needs: train
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check eval gate
+        run: |
+          python - <<'EOF'
+          import os
+          acc = float(os.environ["ACCURACY"])
+          if acc < 0.70:
+              print(f"FAIL: accuracy={acc} < 0.70")
+              raise SystemExit(1)
+          print(f"PASS: accuracy={acc} >= 0.70")
+          EOF
+        env:
+          ACCURACY: ${{ needs.train.outputs.accuracy }}
+
+  deploy:
+    name: Deploy
+    needs: eval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart service and health check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            sudo systemctl restart mlops-serve
+            sleep 5
+            if ! curl -sf http://localhost:8000/health > /dev/null; then
+              echo "Health check failed"
+              exit 1
+            fi
+            echo "Health check OK"
+            curl -s http://localhost:8000/health
