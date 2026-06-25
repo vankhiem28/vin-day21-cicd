@@ -140,10 +140,15 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             sudo systemctl restart mlops-serve
-            sleep 5
-            if ! curl -sf http://localhost:8000/health > /dev/null; then
-              echo "Health check failed"
-              exit 1
-            fi
-            echo "Health check OK"
-            curl -s http://localhost:8000/health
+            for i in {1..30}; do
+              if curl -sf http://localhost:8000/health > /dev/null; then
+                echo "Health check OK (attempt $i)"
+                curl -s http://localhost:8000/health
+                exit 0
+              fi
+              echo "Waiting for service... ($i)"
+              sleep 2
+            done
+            echo "Health check failed after 60s"
+            sudo journalctl -u mlops-serve --no-pager -n 20
+            exit 1
