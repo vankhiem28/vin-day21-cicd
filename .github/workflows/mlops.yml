@@ -57,9 +57,27 @@ jobs:
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Pull data with DVC
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_GHA_CREDS_PATH }}
-        run: dvc pull
+        run: |
+          # Get file list from DVC and download via gcloud storage
+          mkdir -p data
+          python <<'PYEOF'
+          import yaml, subprocess, os
+          bucket = os.environ["GCS_BUCKET"]
+          for dvc_file in ['data/train_phase1.csv.dvc', 'data/eval.csv.dvc']:
+              if not os.path.exists(dvc_file):
+                  print(f"SKIP: {dvc_file} not found")
+                  continue
+              with open(dvc_file) as f:
+                  meta = yaml.safe_load(f)
+              for out in meta.get('outs', []):
+                  md5 = out['md5']
+                  path = out['path']
+                  remote = f'gs://{bucket}/dvc/files/md5/{md5[:2]}/{md5[2:]}'
+                  os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+                  subprocess.run(['gcloud', 'storage', 'cp', remote, path], check=True)
+                  print(f"Downloaded {path}")
+          PYEOF
+          ls -la data/
 
       - name: Train model
         run: python src/train.py
