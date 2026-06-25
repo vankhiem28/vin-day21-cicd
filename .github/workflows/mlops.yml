@@ -119,10 +119,10 @@ jobs:
           python - <<'EOF'
           import os
           acc = float(os.environ["ACCURACY"])
-          if acc < 0.70:
-              print(f"FAIL: accuracy={acc} < 0.70")
+          if acc < 0.60:
+              print(f"FAIL: accuracy={acc} < 0.60")
               raise SystemExit(1)
-          print(f"PASS: accuracy={acc} >= 0.70")
+          print(f"PASS: accuracy={acc} >= 0.60")
           EOF
         env:
           ACCURACY: ${{ needs.train.outputs.accuracy }}

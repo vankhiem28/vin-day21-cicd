@@ -87,4 +87,7 @@ if __name__ == "__main__":
     # Đọc siêu tham số từ params.yaml và gọi hàm train()
     with open("params.yaml") as f:
         params = yaml.safe_load(f)
+    for key in ("max_depth", "min_samples_split", "n_estimators"):
+        if key in params and params[key] == "None":
+            params[key] = None
     train(params)
