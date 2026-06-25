@@ -63,6 +63,7 @@ jobs:
           python <<'PYEOF'
           import yaml, subprocess, os
           bucket = os.environ["GCS_BUCKET"]
+          dvc_dir = os.path.dirname('data/train_phase1.csv.dvc')
           for dvc_file in ['data/train_phase1.csv.dvc', 'data/eval.csv.dvc']:
               if not os.path.exists(dvc_file):
                   print(f"SKIP: {dvc_file} not found")
@@ -73,9 +74,10 @@ jobs:
                   md5 = out['md5']
                   path = out['path']
                   remote = f'gs://{bucket}/dvc/files/md5/{md5[:2]}/{md5[2:]}'
-                  os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-                  subprocess.run(['gcloud', 'storage', 'cp', remote, path], check=True)
-                  print(f"Downloaded {path}")
+                  target = os.path.join(dvc_dir, path) if dvc_dir else path
+                  os.makedirs(os.path.dirname(target) or '.', exist_ok=True)
+                  subprocess.run(['gcloud', 'storage', 'cp', remote, target], check=True)
+                  print(f"Downloaded {target}")
           PYEOF
           ls -la data/
 
