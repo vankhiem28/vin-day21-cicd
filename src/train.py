@@ -11,8 +11,10 @@ from sklearn.metrics import accuracy_score, f1_score
 
 load_dotenv()
 
-mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000"))
-mlflow.set_registry_uri(os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000"))
+_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+if _tracking_uri:
+    mlflow.set_tracking_uri(_tracking_uri)
+    mlflow.set_registry_uri(_tracking_uri)
 PROJECT = os.getenv("PROJECT")
 
 EVAL_THRESHOLD = 0.70

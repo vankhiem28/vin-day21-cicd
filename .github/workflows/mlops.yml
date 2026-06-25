@@ -31,6 +31,8 @@ jobs:
     name: Train
     needs: test
     runs-on: ubuntu-latest
+    env:
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
     outputs:
       accuracy: ${{ steps.read_metrics.outputs.accuracy }}
 
